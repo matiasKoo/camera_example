@@ -14,3 +14,8 @@ VSCode C/C++ extension generated .vscode/c_cpp_properties.json requires addition
 
 }]
 ```
+local_vars.h not in repository for practical reason, it defines wifi SSID and password as follows:
+```
+#define ESP_WIFI_SSID "ssid_name"
+#define ESP_WIFI_PASS "password"
+```
