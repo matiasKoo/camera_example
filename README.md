@@ -4,7 +4,7 @@ Built using ESP-IDF using example from above repository (in examples/camera_exam
 
 Built for ESP32S3 WROOM using OV7670.
 
-VSCode C/C++ extension generated .vscode/c_cpp_properties.json requires additional configuration (at least on my system), add following:
+Need to generate vscode configuration with command "ESP-IDF: Add VS Code configuration folder". Generated c_cpp_properties.json required additional configuration (at least on my system), add following:
 ```
 "configurations":[{
 
