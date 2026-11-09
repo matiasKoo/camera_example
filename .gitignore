@@ -1,0 +1,6 @@
+/build*
+/managed_components*
+/.vscode*
+/main/local_vars.h
+sdkconfig.old
+dependencies.lock
