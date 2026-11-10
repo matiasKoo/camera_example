@@ -16,6 +16,8 @@ Need to generate vscode configuration with command "ESP-IDF: Add VS Code configu
 ```
 local_vars.h not in repository for practical reason, it defines wifi SSID and password as follows:
 ```
-#define ESP_WIFI_SSID "ssid_name"
-#define ESP_WIFI_PASS "password"
+#define ESP_WIFI_AP_SSID "ssid_ap_name"
+#define ESP_WIFI_AP_PASS "password"
+#define ESP_WIFI_STA_SSID "ssid_of_ap_to_connect"
+#define ESP_WIFI_STA_PASS "password_to_ap_connect"
 ```

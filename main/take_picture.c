@@ -149,10 +149,10 @@ void wifi_init_softap()
 
     wifi_config_t wifi_config = {
         .ap = {
-            .ssid = ESP_WIFI_SSID,
-            .ssid_len = strlen(ESP_WIFI_SSID),
+            .ssid = ESP_WIFI_AP_SSID,
+            .ssid_len = strlen(ESP_WIFI_AP_SSID),
             .channel = ESP_WIFI_CHANNEL,
-            .password = ESP_WIFI_PASS,
+            .password = ESP_WIFI_AP_PASS,
             .max_connection = MAX_STA_CONN,
             .authmode = WIFI_AUTH_WPA2_PSK,
             .pmf_cfg = {
@@ -167,7 +167,7 @@ void wifi_init_softap()
     esp_wifi_start();
 
     ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
-             ESP_WIFI_SSID, ESP_WIFI_PASS, ESP_WIFI_CHANNEL);
+             ESP_WIFI_AP_SSID, ESP_WIFI_AP_PASS, ESP_WIFI_CHANNEL);
 
 }
 
@@ -220,8 +220,8 @@ void wifi_init_sta()
 
     wifi_config_t wifi_config = {
         .sta = {
-            .ssid = ESP_WIFI_CLIENT_SSID,
-            .password = ESP_WIFI_PASS,
+            .ssid = ESP_WIFI_STA_SSID,
+            .password = ESP_WIFI_STA_PASS,
             /* Authmode threshold resets to WPA2 as default if auth mode threshold equals WIFI_AUTH_OPEN
              * and password matches WPA2 standards (password len => 8).
              * If you want to connect the device to deprecated WEP/WPA networks, Please set the threshold value
@@ -257,16 +257,16 @@ void wifi_init_sta()
      * happened. */
     if (bits & WIFI_CONNECTED_BIT) {
         ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
-                 ESP_WIFI_CLIENT_SSID, ESP_WIFI_PASS);
+                 ESP_WIFI_STA_SSID, ESP_WIFI_STA_PASS);
     } else if (bits & WIFI_FAIL_BIT) {
         ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
-                 ESP_WIFI_CLIENT_SSID, ESP_WIFI_PASS);
+                 ESP_WIFI_STA_SSID, ESP_WIFI_STA_PASS);
     } else {
         ESP_LOGE(TAG, "UNEXPECTED EVENT");
     }
 
     ESP_LOGI(TAG, "wifi_init_sta finished. SSID:%s password:%s channel:%d",
-             ESP_WIFI_CLIENT_SSID, ESP_WIFI_PASS, ESP_WIFI_CHANNEL);
+             ESP_WIFI_STA_SSID, ESP_WIFI_STA_PASS, ESP_WIFI_CHANNEL);
 
 }
 
