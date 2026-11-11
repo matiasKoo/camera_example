@@ -1,7 +1,3 @@
-/**
- * This example takes a picture every 5s and print its size on serial monitor.
- */
-
 // =============================== SETUP ======================================
 
 // 1. Board setup (Uncomment):
@@ -34,16 +30,21 @@
 // ================================ CODE ======================================
 
 #include "sdkconfig.h"
-#include "local_vars.h"
+#include "local_vars.h" //defininitions for SSID and password for starters
 
 #include <esp_log.h>
 #include <esp_system.h>
+#include <esp_event.h>
 #include <nvs_flash.h>
 #include <sys/param.h>
 #include <string.h>
 
+#include "lwip/err.h"
+#include "lwip/sys.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/event_groups.h"
 
 // support IDF 5.x
 #ifndef portTICK_RATE_MS
@@ -61,20 +62,31 @@
 
 #include "camera_pinout.h"
 
-// need to be in a network to access the server
-// REQUIRES esp_wifi
+// wifi, http server and timer
+// cmakelists: idf_component_register(REQUIRES esp_wifi esp_http_server esp_timer), en tiiä onko pöljästi? muut esp includet <> sisällä
 #include "esp_wifi.h"
+#include "esp_http_server.h"
+#include "esp_timer.h"
 
+// FreeRTOS event group to signal when we are connected
+static EventGroupHandle_t s_wifi_event_group;
+
+/* The event group allows multiple bits for each event, but we only care about two events:
+ * - we are connected to the AP with an IP
+ * - we failed to connect after the maximum amount of retries */
+#define WIFI_CONNECTED_BIT BIT0
+#define WIFI_FAIL_BIT      BIT1
 #define ESP_WIFI_CHANNEL 1
 #define MAX_STA_CONN 2
 
+#define WIFI_MAX_RETRIES 5
+static int s_retry_num = 0;
 
-// adding BMP capture + http server
-// REQUIRES esp_http_server
-#include "esp_http_server.h"
-// REQUIRES esp_timer
-#include "esp_timer.h"
-
+// http stream
+#define PART_BOUNDARY "123456789000000000000987654321"
+static const char* _STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
+static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
+static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %zu\r\n\r\n";
 
 static const char *TAG = "example:take_picture";
 
@@ -113,7 +125,7 @@ static camera_config_t camera_config = {
     .jpeg_buffer_size = 0, //Set to a custom size in bytes for JPEG mode, or 0 to use the default size
 };
 
-static void wifi_event_handler(void* arg, esp_event_base_t event_base,
+static void ap_event_handler(void* arg, esp_event_base_t event_base,
                                     int32_t event_id, void* event_data)
 {
     ESP_LOGI(TAG, "Wifi event %ld!\n", event_id);
@@ -131,16 +143,16 @@ void wifi_init_softap()
 
     esp_event_handler_instance_register(WIFI_EVENT,
                                                         ESP_EVENT_ANY_ID,
-                                                        &wifi_event_handler,
+                                                        &ap_event_handler,
                                                         NULL,
                                                         NULL);
 
     wifi_config_t wifi_config = {
         .ap = {
-            .ssid = ESP_WIFI_SSID,
-            .ssid_len = strlen(ESP_WIFI_SSID),
+            .ssid = ESP_WIFI_AP_SSID,
+            .ssid_len = strlen(ESP_WIFI_AP_SSID),
             .channel = ESP_WIFI_CHANNEL,
-            .password = ESP_WIFI_PASS,
+            .password = ESP_WIFI_AP_PASS,
             .max_connection = MAX_STA_CONN,
             .authmode = WIFI_AUTH_WPA2_PSK,
             .pmf_cfg = {
@@ -155,8 +167,106 @@ void wifi_init_softap()
     esp_wifi_start();
 
     ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
-             ESP_WIFI_SSID, ESP_WIFI_PASS, ESP_WIFI_CHANNEL);
+             ESP_WIFI_AP_SSID, ESP_WIFI_AP_PASS, ESP_WIFI_CHANNEL);
 
+}
+
+static void sta_event_handler(void* arg, esp_event_base_t event_base,
+                                int32_t event_id, void* event_data)
+{
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
+        esp_wifi_connect();
+    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        if (s_retry_num < WIFI_MAX_RETRIES) {
+            esp_wifi_connect();
+            s_retry_num++;
+            ESP_LOGI(TAG, "retry to connect to the AP");
+        } else {
+            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+        }
+        ESP_LOGI(TAG,"connect to the AP fail");
+    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
+        ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
+        s_retry_num = 0;
+        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+    }
+}
+
+void wifi_init_sta()
+{
+    s_wifi_event_group = xEventGroupCreate();
+
+    ESP_ERROR_CHECK(esp_netif_init());
+
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    esp_netif_create_default_wifi_sta();
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    esp_event_handler_instance_t instance_any_id;
+    esp_event_handler_instance_t instance_got_ip;
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+                                                        ESP_EVENT_ANY_ID,
+                                                        &sta_event_handler,
+                                                        NULL,
+                                                        &instance_any_id));
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
+                                                        IP_EVENT_STA_GOT_IP,
+                                                        &sta_event_handler,
+                                                        NULL,
+                                                        &instance_got_ip));
+
+    wifi_config_t wifi_config = {
+        .sta = {
+            .ssid = ESP_WIFI_STA_SSID,
+            .password = ESP_WIFI_STA_PASS,
+            /* Authmode threshold resets to WPA2 as default if auth mode threshold equals WIFI_AUTH_OPEN
+             * and password matches WPA2 standards (password len => 8).
+             * If you want to connect the device to deprecated WEP/WPA networks, Please set the threshold value
+             * to WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK and set the password with length and format matching to
+             * WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK standards.
+             */
+            /* 
+            Tämä kommenttiblokki esimerkkikoodissa käytettyjä, ei tarvi käyttää ilmeisesti
+            .threshold.authmode = ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD,
+            .sae_pwe_h2e = ESP_WIFI_SAE_MODE,
+            .sae_h2e_identifier = EXAMPLE_H2E_IDENTIFIER,
+#ifdef CONFIG_ESP_WIFI_WPA3_COMPATIBLE_SUPPORT
+            .disable_wpa3_compatible_mode = 0,
+#endif
+            */
+        },
+    };
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
+    ESP_ERROR_CHECK(esp_wifi_start() );
+
+    ESP_LOGI(TAG, "wifi_init_sta finished.");
+
+    /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
+     * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
+    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
+            WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+            pdFALSE,
+            pdFALSE,
+            portMAX_DELAY);
+
+    /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
+     * happened. */
+    if (bits & WIFI_CONNECTED_BIT) {
+        ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
+                 ESP_WIFI_STA_SSID, ESP_WIFI_STA_PASS);
+    } else if (bits & WIFI_FAIL_BIT) {
+        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
+                 ESP_WIFI_STA_SSID, ESP_WIFI_STA_PASS);
+    } else {
+        ESP_LOGE(TAG, "UNEXPECTED EVENT");
+    }
+
+    ESP_LOGI(TAG, "wifi_init_sta finished. SSID:%s password:%s channel:%d",
+             ESP_WIFI_STA_SSID, ESP_WIFI_STA_PASS, ESP_WIFI_CHANNEL);
 
 }
 
@@ -171,6 +281,79 @@ httpd_handle_t start_webserver() {
 
     ESP_LOGE(TAG, "Failed to start server");
     return NULL;
+}
+
+esp_err_t jpg_stream_httpd_handler(httpd_req_t *req){
+    camera_fb_t * fb = NULL;
+    esp_err_t res = ESP_OK;
+    size_t jpg_buf_len = 0;
+    uint8_t * jpg_buf = NULL;
+    char part_buf[64];
+    static int64_t last_frame = 0;
+    if(!last_frame) {
+        last_frame = esp_timer_get_time();
+    }
+
+    res = httpd_resp_set_type(req, _STREAM_CONTENT_TYPE);
+    if(res != ESP_OK){
+        return res;
+    }
+
+    while(true){
+        fb = esp_camera_fb_get();
+        if (!fb) {
+            ESP_LOGE(TAG, "Camera capture failed");
+            res = ESP_FAIL;
+            break;
+        }
+        if(fb->format != PIXFORMAT_JPEG){
+            bool jpeg_converted = frame2jpg(fb, 80, &jpg_buf, &jpg_buf_len);
+            if(!jpeg_converted){
+                ESP_LOGE(TAG, "JPEG compression failed");
+                esp_camera_fb_return(fb);
+                res = ESP_FAIL;
+                break;
+            }
+        } else {
+            jpg_buf_len = fb->len;
+            jpg_buf = fb->buf;
+        }
+
+        if(res == ESP_OK){
+            res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
+        }
+        if(res == ESP_OK){
+            int hlen = snprintf(part_buf, sizeof(part_buf), _STREAM_PART, jpg_buf_len);
+            if(hlen < 0 || hlen >= sizeof(part_buf)){
+                ESP_LOGE(TAG, "Header truncated (%d bytes needed >= %zu buffer)",
+                         hlen, sizeof(part_buf));
+                res = ESP_FAIL;
+            } else {
+                res = httpd_resp_send_chunk(req, part_buf, (size_t)hlen);
+            }
+        }
+        if(res == ESP_OK){
+            res = httpd_resp_send_chunk(req, (const char *)jpg_buf, jpg_buf_len);
+        }
+        if(fb->format != PIXFORMAT_JPEG){
+            free(jpg_buf);
+        }
+        esp_camera_fb_return(fb);
+        if(res != ESP_OK){
+            break;
+        }
+        int64_t fr_end = esp_timer_get_time();
+        int64_t frame_time = fr_end - last_frame;
+        last_frame = fr_end;
+        frame_time /= 1000;
+        float fps = frame_time > 0 ? 1000.0f / (float)frame_time : 0.0f;
+        ESP_LOGI(TAG, "MJPG: %uKB %ums (%.1ffps)",
+            (uint32_t)(jpg_buf_len/1024),
+            (uint32_t)frame_time, fps);
+    }
+
+    last_frame = 0;
+    return res;
 }
 
 esp_err_t bmp_httpd_handler(httpd_req_t *req){
@@ -228,18 +411,36 @@ void app_main(void)
     //initialize the networking/server stuff
     static const httpd_uri_t bmp_uri = {
         .uri       = "/",               // the address at which the resource can be found
+        // 192.168.4.1/
         .method    = HTTP_GET,          // The HTTP method (HTTP_GET, HTTP_POST, ...)
         .handler   = bmp_httpd_handler, // The function which process the request
         .user_ctx  = NULL               // Additional user data for context
     };
+    // jpeg stream uri
+    static const httpd_uri_t stream_uri = {
+        .uri        = "/stream",
+        .method     = HTTP_GET,
+        .handler    = jpg_stream_httpd_handler,
+        .user_ctx   = NULL
+    };
 
-    wifi_init_softap();
+    //wifi_init_softap();
+    wifi_init_sta();
+
     httpd_handle_t server = start_webserver();
     esp_err_t err = httpd_register_uri_handler(server, &bmp_uri);
     if (err != ESP_OK){
-        ESP_LOGI(TAG, "URI handler failed");
+        ESP_LOGI(TAG, "BMP URI handler failed");
         return;
     }
+    err = httpd_register_uri_handler(server, &stream_uri);
+    if (err != ESP_OK){
+        ESP_LOGI(TAG, "Stream URI handler failed");
+        return;
+    }
+
+    ESP_LOGI(TAG,"Camera and webserver configured succesfully, exiting app_main()");
+
     /*
     while (1)
     {
