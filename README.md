@@ -1,8 +1,8 @@
 Based on https://github.com/espressif/esp32-camera/
 
-Built using ESP-IDF using example from above repository (in examples/camera_example) in vscode extension
+Built using ESP-IDF (and vscode extension), example from above repository (in examples/camera_example)
 
-Built for ESP32S3 WROOM using OV7670.
+Targeting ESP32S3 WROOM with OV7670.
 
 Need to generate vscode configuration with command "ESP-IDF: Add VS Code configuration folder". Generated c_cpp_properties.json required additional configuration (at least on my system), add following:
 ```
@@ -10,7 +10,7 @@ Need to generate vscode configuration with command "ESP-IDF: Add VS Code configu
 
 ...,
 
-"compileCommands":"<PATH/TO/THIS/build/compile_commands.json>"
+"compileCommands":"PATH/TO/THIS/build/compile_commands.json"
 
 }]
 ```
