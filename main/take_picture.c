@@ -424,6 +424,15 @@ void app_main(void)
         .user_ctx   = NULL
     };
 
+    // should use nvs for credentials, atm just in a header as macros. when this is figured out, remove said macros
+    //Initialize NVS
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
     //wifi_init_softap();
     wifi_init_sta();
 
