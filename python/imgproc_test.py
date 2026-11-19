@@ -2,6 +2,46 @@ import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
 
+class blobparams:
+    # what color blobs
+    blobColor = 255
+
+    # binarization params
+    minThreshold = 10
+    maxThreshold = 200
+    thresholdStep = 1
+
+    # area 
+    filterByArea = True
+    minArea = 10
+
+    # circularity
+    filterByCircularity = True
+    minCircularity = 0.75 
+
+    # convexity
+    filterByConvexity = True
+    minConvexity = 0.87
+
+    # inertia
+    filterByInertia = True
+    minInertiaRatio = 0.4 #0.01
+
+    # take contours
+    collectContours = True
+
+
+class houghparams:
+
+    lines_max=20
+    threshold=1
+    min_rho=0
+    max_rho=240 # this is usually gotten from img dimensions
+    rho_step=1
+    min_theta=0
+    max_theta=np.pi/2
+    theta_step=np.pi/360
+
 
 # probably stupid? idk it works
 def line_func(func_slope,func_x,func_b):
@@ -11,35 +51,19 @@ def line_func(func_slope,func_x,func_b):
 
 def img_proc(img):
     params = cv.SimpleBlobDetector.Params()
-
-    # set to detect light blobs
-    params.blobColor = 255
-
-    # Thresholds for binarization
-    #params.minThreshold = 0 
-    params.minThreshold = 10
-    #params.minThreshold = 2 
-    params.maxThreshold = 200
-    #params.thresholdStep = 1
-
-    # Filter by Area
-    params.filterByArea = True
-    params.minArea = 10
-
-    # Filter by Circularity
-    params.filterByCircularity = True
-    params.minCircularity = 0.75 #0.1
-
-    # Filter by Convexity
-    params.filterByConvexity = True
-    params.minConvexity = 0.87
-
-    # Filter by Inertia
-    params.filterByInertia = True
-    params.minInertiaRatio = 0.4 #0.01
-
-    # testing using contours of blobs
-    params.collectContours = True
+    params.blobColor = blobparams.blobColor
+    params.minThreshold = blobparams.minThreshold
+    params.maxThreshold = blobparams.maxThreshold
+    #params.thresholdStep = blobparams.thresholdStep
+    params.filterByArea = blobparams.filterByArea
+    params.minArea = blobparams.minArea
+    params.filterByCircularity = blobparams.filterByCircularity
+    params.minCircularity = blobparams.minCircularity
+    params.filterByConvexity = blobparams.filterByConvexity
+    params.minConvexity = blobparams.minConvexity
+    params.filterByInertia = blobparams.filterByInertia
+    params.minInertiaRatio = blobparams.minInertiaRatio
+    params.collectContours = blobparams.collectContours
 
     detector = cv.SimpleBlobDetector.create(params)
 
@@ -86,14 +110,14 @@ def img_proc(img):
     # returns an array of 3d vectors (votes, rho, theta) that describe lines
     lines_polar = cv.HoughLinesPointSet(
         point=pixelpoints,
-        lines_max=20,
-        threshold=1,
-        min_rho=0,
+        lines_max=houghparams.lines_max,
+        threshold=houghparams.threshold,
+        min_rho=houghparams.min_rho,
         max_rho=img_height,
-        rho_step=1,
-        min_theta=0,
-        max_theta=np.pi/2,
-        theta_step=np.pi/360
+        rho_step=houghparams.rho_step,
+        min_theta=houghparams.min_theta,
+        max_theta=houghparams.max_theta,
+        theta_step=houghparams.theta_step
     )
 
     print("LINES BE LIKE:-------------------")
