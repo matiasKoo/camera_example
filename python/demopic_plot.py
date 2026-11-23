@@ -13,6 +13,7 @@ jatkokehitys: blop-risti generoidaan eri paikkoihin.
 '''
 
 img = np.zeros([24,32], dtype=int)
+print(np.shape(img))
 
 
 mid_col=[]
@@ -55,8 +56,11 @@ for i in img:
 
 
 img=np.array(img)
-print(img)
+print(np.shape(img),type(img))
 
-
-
-
+#matlike conversion
+img = img[:,np.newaxis,:].astype(np.uint8)
+print(np.shape(img))
+cv.imshow("img",img)
+cv.waitKey(0)
+cv.destroyAllWindows
