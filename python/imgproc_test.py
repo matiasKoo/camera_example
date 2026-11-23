@@ -1,6 +1,7 @@
 import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
+import datetime as dt
 
 class blobparams:
     # what color blobs
@@ -8,24 +9,24 @@ class blobparams:
 
     # binarization params
     minThreshold = 10
-    maxThreshold = 200
+    maxThreshold = 250
     thresholdStep = 1
 
     # area 
     filterByArea = True
-    minArea = 10
+    minArea = 6
 
     # circularity
     filterByCircularity = True
-    minCircularity = 0.75 
+    minCircularity = 0.60
 
     # convexity
-    filterByConvexity = True
+    filterByConvexity = False
     minConvexity = 0.87
 
     # inertia
-    filterByInertia = True
-    minInertiaRatio = 0.4 #0.01
+    filterByInertia = False
+    minInertiaRatio = 0.90 #0.01
 
     # take contours
     collectContours = True
@@ -50,6 +51,8 @@ def line_func(func_slope,func_x,func_b):
 
 
 def img_proc(img):
+    print("rcv img: ",np.shape(img),type(img))
+    #recv_img = img[:,np.newaxis,:]
     params = cv.SimpleBlobDetector.Params()
     params.blobColor = blobparams.blobColor
     params.minThreshold = blobparams.minThreshold
@@ -83,6 +86,8 @@ def img_proc(img):
     # returns a tuple
     conts = detector.getBlobContours()
     print("conts type:",type(conts))
+    print("conts: ",conts)
+    #print("conts shape:",conts)
     #print("conts[0]:",type(conts[0])," conts[1]:",type(conts[1]))
     #print("shape 0:", np.shape(conts[0])," shape 1:",np.shape(conts[1]))
 
@@ -97,7 +102,7 @@ def img_proc(img):
     cv.drawContours(mask,conts,-1,255,thickness=cv.FILLED)
 
     # need to experiment or just figure out what sort of kernel to use. kernel dimensions should be dynamic?
-    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE,(10,8))
+    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE,(5,5))
 
     mask = cv.morphologyEx(mask,cv.MORPH_OPEN,kernel)
 
@@ -156,13 +161,30 @@ def img_proc(img):
 
 
     cv.imshow("blobs detected",output)
-    cv.waitKey(0)
+    wait_ret = cv.waitKey(0)
     cv.destroyAllWindows()
 
-if __name__ == '__main__':
+    if wait_ret == 32:
+        # tässä tallenna vaikka kaikki kolme kuvaa cv2.imwrite(filename, image)
+        date = dt.datetime.now()
+        date_str = date.strftime("%H_%M_%d_%m_%y")
+        print(date_str, type(date_str))
+        bw_str = "img/data/" + date_str + "-im_bw.png"
+        line_str = "img/data/" + date_str + "-im_line.png"
+        mask_str = "img/data/" + date_str + "-im_mask.png"
+        cv.imwrite(bw_str, img)
+        cv.imwrite(line_str, output)
+        cv.imwrite(mask_str, mask)
+        print("saved images to img/data/")
 
+    
+
+if __name__ == '__main__':
+#poist tää
+    #exit()
     imagefile  = cv.imread('img/leds_far.png', cv.IMREAD_GRAYSCALE)
     assert imagefile is not None, "file could not be read, check with os.path.exists()"
     print("cv.imread tyyppi: ", type(imagefile), np.shape(imagefile))
+    cv.imshow("blobs detected",imagefile)
 
     img_proc(imagefile)
