@@ -6,7 +6,7 @@ from PIL import Image # might be unnecessary
 
 import imgproc_test as ip
 
-connection = http.client.HTTPConnection("192.168.43.183")      # luodaa yhteys, tähä IP
+connection = http.client.HTTPConnection("10.61.14.225")      # luodaa yhteys, tähä IP
 connection.request("GET", "/")                                      # 
 response = connection.getresponse()                                 # vastauksena haetaan kuva
 print("Status: {} and reason: {}".format(response.status, response.reason)) # status ehkä errorin handlaamisee?
@@ -27,14 +27,13 @@ img = np.asarray(bytearray(res_data),dtype="uint8")
 img = cv.imdecode(img, cv.IMREAD_COLOR_RGB)
 img = cv.cvtColor(img,cv.COLOR_RGB2GRAY)
 
+connection.close()
+
 print(type(img),np.shape(img))
 cv.imshow("image",img)
-cv.waitKey(0)
-cv.destroyAllWindows()
 ip.img_proc(img)
 
 
-connection.close()
 
 
 """
