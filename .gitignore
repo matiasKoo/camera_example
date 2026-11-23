@@ -5,3 +5,4 @@
 *__pycache__*
 sdkconfig.old
 dependencies.lock
+/python/img/data
