@@ -4,32 +4,33 @@ import matplotlib.pyplot as plt
 import datetime as dt
 
 class blobparams:
+    params = cv.SimpleBlobDetector.Params()
     # what color blobs
-    blobColor = 255
+    params.blobColor = 255
 
     # binarization params
-    minThreshold = 10
-    maxThreshold = 250
-    thresholdStep = 1
+    params.minThreshold = 10
+    params.maxThreshold = 250
+    params.thresholdStep = 1
 
     # area 
-    filterByArea = True
-    minArea = 6
+    params.filterByArea = True
+    params.minArea = 6
 
     # circularity
-    filterByCircularity = True
-    minCircularity = 0.60
+    params.filterByCircularity = True
+    params.minCircularity = 0.60
 
     # convexity
-    filterByConvexity = False
-    minConvexity = 0.87
+    params.filterByConvexity = False
+    params.minConvexity = 0.87
 
     # inertia
-    filterByInertia = False
-    minInertiaRatio = 0.90 #0.01
+    params.filterByInertia = False
+    params.minInertiaRatio = 0.90 #0.01
 
     # take contours
-    collectContours = True
+    params.collectContours = True
 
 
 class houghparams:
@@ -52,73 +53,46 @@ def line_func(func_slope,func_x,func_b):
 
 def img_proc(img):
     print("rcv img: ",np.shape(img),type(img))
-    #recv_img = img[:,np.newaxis,:]
-    params = cv.SimpleBlobDetector.Params()
-    params.blobColor = blobparams.blobColor
-    params.minThreshold = blobparams.minThreshold
-    params.maxThreshold = blobparams.maxThreshold
-    #params.thresholdStep = blobparams.thresholdStep
-    params.filterByArea = blobparams.filterByArea
-    params.minArea = blobparams.minArea
-    params.filterByCircularity = blobparams.filterByCircularity
-    params.minCircularity = blobparams.minCircularity
-    params.filterByConvexity = blobparams.filterByConvexity
-    params.minConvexity = blobparams.minConvexity
-    params.filterByInertia = blobparams.filterByInertia
-    params.minInertiaRatio = blobparams.minInertiaRatio
-    params.collectContours = blobparams.collectContours
 
-    detector = cv.SimpleBlobDetector.create(params)
-
-    # try adding thresholding pre detections; getBlobContours returns all contours regardless of params?
-    # this seems a little doomed. Early testing showed ok results with naive thresholding on 127 cutoff
-    # binarizing image that way seems not smart though
-
-    #blur = cv.GaussianBlur(img,(5,5),0)
-    #ret_otsu, img_otsu = cv.threshold(blur,0,255,cv.THRESH_BINARY+cv.THRESH_OTSU)
-
-    #plt.plot()
-    #plt.imshow(img_otsu)
-    #plt.show()
+    detector = cv.SimpleBlobDetector.create(blobparams.params)
 
     # detect blobs
     keypoints = detector.detect(img)
-    # returns a tuple
     conts = detector.getBlobContours()
     print("conts type:",type(conts))
     print("conts: ",conts)
-    #print("conts shape:",conts)
-    #print("conts[0]:",type(conts[0])," conts[1]:",type(conts[1]))
-    #print("shape 0:", np.shape(conts[0])," shape 1:",np.shape(conts[1]))
 
     # Draw blobs as red circles
     output = cv.drawKeypoints(img, keypoints, np.array([]), (0, 0, 255),
                             cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
-    # testing contours
+    # draw contours as found by detector
     cv.drawContours(output,conts,-1, (0,255,0), 1)
 
+    # bitmask to which we also draw contours for further processing
     mask = np.zeros(img.shape,np.uint8)
     cv.drawContours(mask,conts,-1,255,thickness=cv.FILLED)
 
     # need to experiment or just figure out what sort of kernel to use. kernel dimensions should be dynamic?
     kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE,(5,5))
 
+    # open first "shrinks" and then "grows" all light pixels
     mask = cv.morphologyEx(mask,cv.MORPH_OPEN,kernel)
 
     cv.imshow("mask",mask)
 
     img_height, img_width = mask.shape
+    # TODO: no error handling here causes problems if no blobs are detected
     pixelpoints = cv.findNonZero(mask)
     pixelpoints = pixelpoints[:,np.newaxis,:]
 
     # returns an array of 3d vectors (votes, rho, theta) that describe lines
     lines_polar = cv.HoughLinesPointSet(
-        point=pixelpoints,
+        point=pixelpoints, # needs to be matlike with (x,1,y) dimensions (the middle "empty" dimension is for colour channels or sth)
         lines_max=houghparams.lines_max,
         threshold=houghparams.threshold,
         min_rho=houghparams.min_rho,
-        max_rho=img_height,
+        max_rho=img_height, # this is in houghparams class as well but probably just worth doing here
         rho_step=houghparams.rho_step,
         min_theta=houghparams.min_theta,
         max_theta=houghparams.max_theta,
@@ -144,7 +118,7 @@ def img_proc(img):
         if np.tan(theta) == 0:
             slope = 0   # hackerman way of avoiding dividing by zero
         elif theta == np.pi/2:
-            slope = 100**100 # avoid undefined with arbitrarily large slope, sign doesnt matter
+            slope = 10**10 # avoid undefined with arbitrarily large slope, sign doesnt matter
         else:
             slope = -1/np.tan(theta)
         y_intercept = y0-slope*x0
@@ -164,10 +138,10 @@ def img_proc(img):
     wait_ret = cv.waitKey(0)
     cv.destroyAllWindows()
 
-    if wait_ret == 32:
-        # tässä tallenna vaikka kaikki kolme kuvaa cv2.imwrite(filename, image)
+    if wait_ret == 32: # wait_ret is 32 if spacebar was pressed during waitKey
+
         date = dt.datetime.now()
-        date_str = date.strftime("%H_%M_%d_%m_%y")
+        date_str = date.strftime("%y-%m-%d_%H-%M")
         print(date_str, type(date_str))
         bw_str = "img/data/" + date_str + "-im_bw.png"
         line_str = "img/data/" + date_str + "-im_line.png"
@@ -180,8 +154,7 @@ def img_proc(img):
     
 
 if __name__ == '__main__':
-#poist tää
-    #exit()
+    
     imagefile  = cv.imread('img/leds_far.png', cv.IMREAD_GRAYSCALE)
     assert imagefile is not None, "file could not be read, check with os.path.exists()"
     print("cv.imread tyyppi: ", type(imagefile), np.shape(imagefile))
