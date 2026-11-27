@@ -8,6 +8,8 @@ from sklearn.cluster import DBSCAN
 from scipy.spatial.distance import pdist, squareform
 #testing speed
 import time
+# globals for keeping track of clusters
+looped_points_list = []
 
 def polar_to_poly(polars,dims):
     ret = []
@@ -22,18 +24,22 @@ def polar_to_poly(polars,dims):
     return ret
 
 def compute_dist(p1,p2):
+    global looped_points_list
     # currently just does 1 point pair at a time
-    # I suspect this is a bottleneck, and translating this to use np arrays would gain
+    # could be a bottleneck
     # regular distance, pythagoras my goat
-    ro1,th1 = p1
-    ro2,th2 = p2
-    dist1 = np.sqrt((ro1-ro2)**2 + (th1-th2)**2)
+    dist1 = np.linalg.norm(p1-p2)
     # "wrapped" distance
-    rho_inv = -p2[0]
     theta_shift = p2[1]+1 if p2[1] < 0.5 else p2[1]-1
-    dist2 = np.sqrt((p1[0]-rho_inv)**2 + (p1[1]-theta_shift)**2)
+    p2_shift = np.array([-p2[0],theta_shift])
+    dist2 = np.linalg.norm(p1-p2_shift)
 
-    return np.minimum(dist1,dist2)
+    if dist1 > dist2:
+        looped_points_list.append(True)
+        return dist2
+    else:
+        looped_points_list.append(False)
+        return dist1
 
 def find_clusters(data):
     # using DBSCAN, find clusters from hough line data
@@ -53,13 +59,22 @@ def find_clusters(data):
     data_norm = np.zeros(np.shape(data))
     data_norm[:,0] = data[:,0]/ro_max_abs
     data_norm[:,1] = data[:,1]/th_max
-        
+    # sort of todo: below distance matrix calculations shouldn't manipulate globals
+    # the globals create a bool mask for which data pairs "wrap" around
+    # this is bad and easy to break, but it works for now
     distance_matrix = squareform(pdist(data_norm, metric=compute_dist))
     db = DBSCAN(eps=0.1,min_samples=5,metric="precomputed")
-    ret = db.fit_predict(distance_matrix)
+    db.fit_predict(distance_matrix)
+    ret = dict((
+        ("labels",db.labels_),
+        ("core_samples",db.core_sample_indices_) #returns indices of non-noise
+    ))
+    
     return ret
 
 def pos_calc(kp,conts,lin_pol,lin_pts,dims):
+    global looped_points_list
+
     mask = np.zeros(dims,dtype=np.uint8)
     mask = cv.drawKeypoints(mask, kp, np.array([]), (0, 0, 255),
                             cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
@@ -70,14 +85,24 @@ def pos_calc(kp,conts,lin_pol,lin_pts,dims):
         mask[x][y] = 255
     #cv.imshow("mask",mask)
 
+    looped_points_list = []
     # this might be unnecessary; just how I managed to plot this
     polys = polar_to_poly(lin_pol,dims)
     clusters = find_clusters(lin_pol[:,1:])
-    print(clusters)
-    print("clusters: ",type(clusters),np.shape(clusters))
+    # the list is a global and the mask is easy to break, be advised
+    looped_points_mat = squareform(np.array(looped_points_list,dtype=bool))
+    print("cluster labels:",type(clusters["labels"]),np.shape(clusters["labels"]),"\n",clusters["labels"])
+    #print("cluster core samples:",clusters["core_samples"])
+    print(np.shape(looped_points_mat),"matrix of looped pts\n",looped_points_mat)
 
+    unique_clusters = np.unique(clusters["labels"],True)
+    print(unique_clusters)
+
+
+    ################################################
+    # end of script with a bunch of matplotlib stuff
+    ################################################
     end_time = time.perf_counter()
-
     plt.figure(figsize=(16,6))
     ax1 = plt.subplot(1,2,1)
     for i in range(len(polys)):
@@ -93,11 +118,7 @@ def pos_calc(kp,conts,lin_pol,lin_pts,dims):
     #ax2.xaxis.set_major_formatter(tck.FormatStrFormatter('%g $\pi$'))
     #ax2.xaxis.set_major_locator(tck.MultipleLocator(np.pi / 2)) 
     ax2.autoscale(axis="x",tight=True)
-    unique_labels = set(clusters)
-    print("labels:",unique_labels)
-    #for i in range(len(lin_pol)):
-    #    colour = clusters[i]
-    ax2.scatter(lin_pol[:,2],lin_pol[:,1],c=clusters,s=8,marker="x")#theta,rho
+    ax2.scatter(lin_pol[:,2],lin_pol[:,1],c=clusters["labels"],s=8,marker="x")#theta,rho
     plt.show()
 
     return end_time
