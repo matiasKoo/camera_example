@@ -46,6 +46,10 @@
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 
+#include <stdio.h>
+#include <esp_err.h>
+#include <mpu6050.h>
+
 // support IDF 5.x
 #ifndef portTICK_RATE_MS
 #define portTICK_RATE_MS portTICK_PERIOD_MS
@@ -68,6 +72,13 @@
 #include "esp_http_server.h"
 #include "esp_timer.h"
 
+#define CONFIG_EXAMPLE_I2C_ADDRESS_LOW 1
+#ifdef CONFIG_EXAMPLE_I2C_ADDRESS_LOW
+#define ADDR MPU6050_I2C_ADDRESS_LOW
+#else
+#define ADDR MPU6050_I2C_ADDRESS_HIGH
+#endif
+
 // FreeRTOS event group to signal when we are connected
 static EventGroupHandle_t s_wifi_event_group;
 
@@ -89,6 +100,7 @@ static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
 static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %zu\r\n\r\n";
 
 static const char *TAG = "example:take_picture";
+static const char *TAG1 = "mpu6050_test";
 
 #if ESP_CAMERA_SUPPORTED
 static camera_config_t camera_config = {
@@ -401,6 +413,51 @@ static esp_err_t init_camera(void)
 }
 #endif
 
+void mpu6050_test(void *pvParameters)
+{
+    mpu6050_dev_t dev = { 0 };
+
+    ESP_ERROR_CHECK(mpu6050_init_desc(&dev, ADDR, 0, IMU_SDA_GPIO, IMU_SCL_GPIO));
+
+    while (1)
+    {
+        esp_err_t res = i2c_dev_probe(&dev.i2c_dev, I2C_DEV_WRITE);
+        if (res == ESP_OK)
+        {
+            ESP_LOGI(TAG1, "Found MPU60x0 device");
+            break;
+        }
+        ESP_LOGE(TAG1, "MPU60x0 not found");
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
+    ESP_ERROR_CHECK(mpu6050_init(&dev));
+
+    ESP_LOGI(TAG1, "Accel range: %d", dev.ranges.accel);
+    ESP_LOGI(TAG1, "Gyro range:  %d", dev.ranges.gyro);
+
+    while (1)
+    {
+        float temp;
+        mpu6050_acceleration_t accel = { 0 };
+        mpu6050_rotation_t rotation = { 0 };
+
+        ESP_ERROR_CHECK(mpu6050_get_temperature(&dev, &temp));
+        ESP_ERROR_CHECK(mpu6050_get_motion(&dev, &accel, &rotation));
+
+        ESP_LOGI(TAG1, "**********************************************************************");
+        ESP_LOGI(TAG1, "Acceleration: x=%.4f   y=%.4f   z=%.4f", accel.x, accel.y, accel.z);
+        ESP_LOGI(TAG1, "Rotation:     x=%.4f   y=%.4f   z=%.4f", rotation.x, rotation.y, rotation.z);
+        ESP_LOGI(TAG1, "Temperature:  %.1f", temp);
+
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+
+
+
+
+
 void app_main(void)
 {
     
@@ -449,6 +506,12 @@ void app_main(void)
     }
 
     ESP_LOGI(TAG,"Camera and webserver configured succesfully, exiting app_main()");
+
+    // task
+    ESP_ERROR_CHECK(i2cdev_init());
+
+    xTaskCreate(mpu6050_test, "mpu6050_test", configMINIMAL_STACK_SIZE * 6, NULL, 5, NULL);
+
 
     /*
     while (1)

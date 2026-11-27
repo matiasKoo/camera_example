@@ -61,6 +61,8 @@
 #define CAM_PIN_D5 18
 #define CAM_PIN_D6 17
 #define CAM_PIN_D7 16
+#define IMU_SDA_GPIO 1
+#define IMU_SCL_GPIO 2
 #endif
 // ESP32S3 (GOOUU TECH)
 #ifdef BOARD_ESP32S3_GOOUUU
