@@ -2,7 +2,7 @@ import http.client
 import cv2 as cv
 import numpy as np
 
-import imgproc_test as ip
+import imgproc_test as imp
 
 connection = http.client.HTTPConnection("10.61.14.225")      # luodaa yhteys, tähä IP
 connection.request("GET", "/")                                      # 
@@ -25,4 +25,4 @@ connection.close()
 
 print(type(img),np.shape(img))
 cv.imshow("image",img)
-ip.img_proc(img)
+imp.img_proc(img)
